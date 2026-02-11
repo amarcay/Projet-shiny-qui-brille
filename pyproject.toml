@@ -4,13 +4,13 @@ version = "0.1.0"
 description = "Projet de Data Science"
 authors = ["Alphonse Marcay <[EMAIL_ADDRESS]>", "Thomas Bourvon"]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-fastapi = "^0.100.0"
-uvicorn = {extras = ["standard"], version = "^0.23.0"}
-pandas = "^2.0.0"
-seaborn = "^0.12.0"
-matplotlib = "^3.7.0"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "seaborn>=0.13.2",
+    "streamlit>=1.31.0",
+    "python-dotenv>=1.0.0",
+    "pandas>=2.0.0",
+]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
