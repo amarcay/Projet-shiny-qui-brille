@@ -1,0 +1,15 @@
+# Data
+data/
+
+# macOS
+.DS_Store
+
+# Claude
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+env/
