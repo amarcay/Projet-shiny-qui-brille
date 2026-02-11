@@ -13,3 +13,8 @@ __pycache__/
 *.pyo
 .venv/
 env/
+
+.gitignore
+Projet final.pdf
+
+reports/
