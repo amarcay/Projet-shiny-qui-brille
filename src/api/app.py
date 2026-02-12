@@ -68,7 +68,7 @@ def _get_best_model():
 @app.route("/")
 def home():
     model = _get_best_model()
-    test_metrics = model.get("metrics", {}).get("test_2024", {})
+    test_metrics = model.get("metrics", {}).get("test_2025_2026", {})
 
     sim = _read_csv(REPORTS_DIR / "simulation" / "simulation_10k_history.csv")
 
@@ -134,7 +134,7 @@ def home():
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             margin=dict(l=50, r=20, t=40, b=40),
-            title="Simulation 10 000 EUR - 2024 (Test)",
+            title="Simulation 10 000 EUR - 2025-2026 (Test)",
             yaxis_title="Capital (EUR)",
             yaxis_range=[8000, 12000],
             xaxis_title="",
@@ -259,7 +259,7 @@ def performance():
     # Comparison vs Buy & Hold (2024 Test only)
     comparison = []
     if not ev.empty:
-        test_rows = ev[ev["Split"] == "2024 (Test)"]
+        test_rows = ev[ev["Split"] == "2025 & 2026 (Test)"]
         for _, row in test_rows.iterrows():
             strat = row["Strategie"] if "Strategie" in row.index else row.get("Strat\u00e9gie", "")
             if strat in (strategy_name, "Buy & Hold"):
