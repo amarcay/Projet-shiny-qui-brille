@@ -18,3 +18,6 @@ env/
 Projet final.pdf
 
 reports/
+
+CLAUDE.md
+models/v1/dqn_gbpusd_m15.zip
