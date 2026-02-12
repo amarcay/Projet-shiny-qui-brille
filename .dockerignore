@@ -1,0 +1,10 @@
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.claude/
+.DS_Store
+uv.lock
+*.pdf
