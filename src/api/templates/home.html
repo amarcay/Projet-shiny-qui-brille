@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}GBP/USD Trading System{% endblock %}
+{% block content %}
+<div class="hero">
+    <h1>Algorithmic Trading <span style="color:var(--accent)">GBP/USD</span></h1>
+    <p class="tagline">Intelligence artificielle appliquee au Forex – Decisions automatisees toutes les 15 minutes</p>
+    <a href="/signal" class="cta">Tester un signal live</a>
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="label">Capital final (10k EUR)</div>
+        <div class="value {% if kpis.get('capital_final', 0) >= 10000 %}green{% else %}red{% endif %}">
+            {{ "{:,.2f}".format(kpis.get('capital_final', 0)) }} &euro;
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Sharpe Ratio (2024)</div>
+        <div class="value blue">{{ kpis.get('sharpe', 'N/A') }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Profit Factor</div>
+        <div class="value blue">{{ kpis.get('profit_factor', 'N/A') }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Nombre de trades</div>
+        <div class="value blue">{{ "{:,}".format(kpis.get('n_trades', 0)) }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Max Drawdown</div>
+        <div class="value red">{{ "{:,.2f}".format(kpis.get('max_drawdown', 0)) }} &euro;</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Modele actif</div>
+        <div class="value green" style="font-size:20px;">{{ kpis.get('model_name', 'N/A') }} ({{ kpis.get('version', '') }})</div>
+    </div>
+</div>
+
+{% if chart_json %}
+<div class="chart-box">
+    <div id="home-chart"></div>
+</div>
+<script>
+    var data = JSON.parse('{{ chart_json | safe }}');
+    Plotly.newPlot('home-chart', data.data, data.layout, {responsive: true});
+</script>
+{% endif %}
+
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="label">Paire</div>
+        <div class="value green" style="font-size:22px;">GBP/USD</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Timeframe</div>
+        <div class="value blue" style="font-size:22px;">M15</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Periode de test</div>
+        <div class="value" style="font-size:22px;">2024</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Decisions</div>
+        <div class="value" style="font-size:22px;">BUY / SELL / HOLD</div>
+    </div>
+</div>
+{% endblock %}
