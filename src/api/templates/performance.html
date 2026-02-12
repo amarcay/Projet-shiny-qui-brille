@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Performance – GBP/USD{% endblock %}
+{% block content %}
+<h1>Performance – {{ model_name }}</h1>
+
+{% if metrics %}
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="label">Capital final</div>
+        <div class="value {% if metrics.capital_final >= 10000 %}green{% else %}red{% endif %}">
+            {{ "{:,.2f}".format(metrics.capital_final) }} &euro;
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">PnL total</div>
+        <div class="value {% if metrics.pnl_total >= 0 %}green{% else %}red{% endif %}">
+            {{ "{:,.2f}".format(metrics.pnl_total) }} &euro;
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Max Drawdown</div>
+        <div class="value red">{{ "{:,.2f}".format(metrics.max_dd_eur) }} &euro;</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Nb trades</div>
+        <div class="value blue">{{ "{:,}".format(metrics.nb_trades) }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Max capital</div>
+        <div class="value green">{{ "{:,.2f}".format(metrics.max_capital) }} &euro;</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Couts totaux</div>
+        <div class="value red">{{ "{:,.2f}".format(metrics.total_costs) }} &euro;</div>
+    </div>
+</div>
+{% endif %}
+
+{% if chart_json %}
+<div class="chart-box">
+    <div id="perf-chart"></div>
+</div>
+<script>
+    var data = JSON.parse('{{ chart_json | safe }}');
+    Plotly.newPlot('perf-chart', data.data, data.layout, {responsive: true});
+</script>
+{% endif %}
+
+{% if comparison %}
+<div class="section-title">Comparaison vs Buy &amp; Hold – 2024 (Test)</div>
+<div class="table-wrap">
+    <table>
+        <tr>
+            <th>Strategie</th>
+            <th>Profit cumule</th>
+            <th>Max Drawdown</th>
+            <th>Sharpe</th>
+            <th>Profit Factor</th>
+            <th>Nb trades</th>
+        </tr>
+        {% for row in comparison %}
+        <tr>
+            <td><strong>{{ row["Stratégie"] }}</strong></td>
+            <td style="color:{{ '#00d4aa' if row['Profit cumulé'] >= 0 else '#ff4d6a' }}">
+                {{ "%.4f"|format(row["Profit cumulé"]) }}
+            </td>
+            <td style="color:#ff4d6a">{{ "%.4f"|format(row["Max drawdown"]) }}</td>
+            <td>{{ "%.2f"|format(row["Sharpe"]) }}</td>
+            <td>{{ "%.4f"|format(row["Profit factor"]) }}</td>
+            <td>{{ row["Nb trades"]|int }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if monthly %}
+<div class="section-title">Resume mensuel</div>
+<div class="table-wrap">
+    <table>
+        <tr>
+            <th>Mois</th>
+            <th>Capital fin</th>
+            <th>PnL (EUR)</th>
+            <th>Nb trades</th>
+        </tr>
+        {% for m in monthly %}
+        <tr>
+            <td>{{ m.month }}</td>
+            <td>{{ "%.2f"|format(m.capital_end) }}</td>
+            <td style="color:{{ '#00d4aa' if m.pnl >= 0 else '#ff4d6a' }}">{{ "%.2f"|format(m.pnl) }}</td>
+            <td>{{ m.trades }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Technologie – GBP/USD{% endblock %}
+{% block content %}
+<h1>Technologie</h1>
+
+<div class="content-card">
+    <h2>Pipeline de donnees</h2>
+    <p>Le systeme traite des donnees brutes de marche GBP/USD en plusieurs etapes automatisees :</p>
+    <ul>
+        <li><strong>Import</strong> – Donnees M1 (1 minute) brutes du marche Forex</li>
+        <li><strong>Aggregation</strong> – Conversion en bougies M15 (15 minutes) : Open, High, Low, Close, Volume</li>
+        <li><strong>Nettoyage</strong> – Suppression des anomalies, gestion des donnees manquantes</li>
+        <li><strong>Feature engineering</strong> – Calcul de {{ model.get('features', [])|length }} indicateurs techniques</li>
+    </ul>
+</div>
+
+<div class="content-card">
+    <h2>Split temporel strict</h2>
+    <p>Pour garantir la validite des resultats, les donnees sont divisees chronologiquement :</p>
+    <div class="kpi-grid" style="margin-top:16px;">
+        <div class="kpi-card">
+            <div class="label">Entrainement</div>
+            <div class="value blue" style="font-size:22px;">2022</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Validation</div>
+            <div class="value" style="font-size:22px;color:var(--yellow);">2023</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Test (jamais vu)</div>
+            <div class="value green" style="font-size:22px;">2024</div>
+        </div>
+    </div>
+    <p style="margin-top:12px;">Le modele n'a <strong>jamais vu</strong> les donnees de 2024 pendant l'entrainement.
+       Les performances affichees sont donc representatives de conditions reelles.</p>
+</div>
+
+<div class="content-card">
+    <h2>Indicateurs techniques</h2>
+    <p>Le modele utilise {{ model.get('features', [])|length }} features calculees uniquement sur des donnees passees (aucun biais d'anticipation) :</p>
+    <div class="form-grid" style="margin-top:12px;">
+        {% for f in model.get('features', []) %}
+        <div>
+            <span class="badge badge-blue">{{ f }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="content-card">
+    <h2>Modele de decision</h2>
+    <p>Le systeme repose sur un modele <strong>{{ model.get('model_name', 'N/A') }}</strong>
+       ({{ model.get('model_type', 'N/A') }}) qui evalue chaque bougie M15 et genere un signal :</p>
+    <ul>
+        <li><span class="badge badge-green">BUY</span> – Acheter GBP/USD</li>
+        <li><span class="badge badge-red">SELL</span> – Vendre GBP/USD</li>
+        <li><span class="badge badge-yellow">HOLD</span> – Ne rien faire</li>
+    </ul>
+    <p style="margin-top:12px;">Les backtests incluent un cout de transaction de <strong>1 pip</strong> (0.0001) par trade
+       pour simuler des conditions realistes.</p>
+</div>
+
+<div class="content-card">
+    <h2>Metriques</h2>
+    <p>Les performances sont evaluees avec des metriques standard du trading quantitatif :</p>
+    <ul>
+        <li><strong>Sharpe Ratio</strong> – Rendement ajuste au risque (annualise : &radic;(96 &times; 252))</li>
+        <li><strong>Profit Factor</strong> – Ratio gains / pertes brutes</li>
+        <li><strong>Max Drawdown</strong> – Perte maximale depuis un sommet de capital</li>
+        <li><strong>Nombre de trades</strong> – Frequence d'intervention du modele</li>
+    </ul>
+</div>
+{% endblock %}

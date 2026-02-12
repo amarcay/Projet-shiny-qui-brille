@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Signal Live – GBP/USD{% endblock %}
+{% block content %}
+<h1>Signal Live</h1>
+
+{% if model_info %}
+<div class="kpi-grid" style="margin-bottom:20px;">
+    <div class="kpi-card">
+        <div class="label">Modele charge (API)</div>
+        <div class="value green" style="font-size:18px;">{{ model_info.get('model_name', 'N/A') }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Version</div>
+        <div class="value blue" style="font-size:18px;">{{ model_info.get('version', 'N/A') }}</div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-error">
+    API FastAPI non disponible (port 8000). Les predictions ne sont pas accessibles pour le moment.
+</div>
+{% endif %}
+
+<div class="content-card">
+    <h2>Tester une prediction</h2>
+    <p style="margin-bottom:16px;">Saisissez les valeurs des features d'une bougie M15 pour obtenir un signal de trading.</p>
+
+    <form method="POST" action="/signal">
+        <div class="form-grid">
+            {% for feat in features %}
+            <div class="form-group">
+                <label for="{{ feat }}">{{ feat }}</label>
+                <input type="number" step="any" id="{{ feat }}" name="{{ feat }}"
+                       value="{{ request.form.get(feat, '') }}" placeholder="0.0">
+            </div>
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-primary">Predire le signal</button>
+    </form>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+{% if result %}
+<div class="signal-result">
+    <div class="signal-label">Signal predit</div>
+    <div class="signal-value"
+         style="color:{% if result.get('signal') == 'BUY' %}var(--accent){% elif result.get('signal') == 'SELL' %}var(--red){% else %}var(--text2){% endif %}">
+        {{ result.get('signal', result.get('prediction', 'N/A')) }}
+    </div>
+    {% if result.get('confidence') %}
+    <div class="signal-confidence">Confiance : {{ "%.1f"|format(result.confidence * 100) }}%</div>
+    {% endif %}
+    {% if result.get('model_version') %}
+    <div class="signal-confidence">Modele : {{ result.model_version }}</div>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="content-card">
+    <h2>Informations</h2>
+    <p>Le modele <strong>{{ model.get('model_name', 'N/A') }}</strong> ({{ model.get('version', '') }}) utilise
+       <strong>{{ features|length }}</strong> features techniques pour generer un signal
+       <span class="badge badge-green">BUY</span>,
+       <span class="badge badge-red">SELL</span> ou
+       <span class="badge badge-yellow">HOLD</span>
+       a chaque bougie M15.</p>
+    <ul>
+        {% for f in features %}
+        <li>{{ f }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
