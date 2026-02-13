@@ -37,6 +37,7 @@ class ModelInfoResponse(BaseModel):
 
     version: str
     model_type: str
+    model_name: Optional[str] = None
     features: list[str]
     available_versions: list[str]
     loaded_at: str

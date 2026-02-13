@@ -3,9 +3,9 @@
 import os
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MODEL_DIR = PROJECT_ROOT / "models"
-DEFAULT_VERSION = os.environ.get("MODEL_VERSION", "v1")
+DEFAULT_VERSION = os.environ.get("MODEL_VERSION", "v2")
 
 API_TITLE = "GBP/USD M15 Trading API"
 API_DESCRIPTION = (

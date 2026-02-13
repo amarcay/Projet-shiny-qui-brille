@@ -24,7 +24,14 @@
     <h2>Tester une prediction</h2>
     <p style="margin-bottom:16px;">Saisissez les valeurs des features d'une bougie M15 pour obtenir un signal de trading.</p>
 
-    <form method="POST" action="/signal">
+    <div style="margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <button type="button" id="btn-autofill" class="btn" style="background:var(--blue);color:#fff;">
+            &#9889; Simuler une bougie
+        </button>
+        <span id="autofill-info" style="color:var(--text2);font-size:13px;"></span>
+    </div>
+
+    <form method="POST" action="/signal" id="signal-form">
         <div class="form-grid">
             {% for feat in features %}
             <div class="form-group">
@@ -39,24 +46,100 @@
 </div>
 
 {% if error %}
-<div class="alert alert-error">{{ error }}</div>
+<div class="alert alert-error" id="error-box">{{ error }}</div>
 {% endif %}
 
+<div class="alert alert-error" id="js-error-box" style="display:none;"></div>
+
 {% if result %}
-<div class="signal-result">
+<div class="signal-result" id="signal-result">
     <div class="signal-label">Signal predit</div>
-    <div class="signal-value"
+    <div class="signal-value" id="signal-value"
          style="color:{% if result.get('signal') == 'BUY' %}var(--accent){% elif result.get('signal') == 'SELL' %}var(--red){% else %}var(--text2){% endif %}">
         {{ result.get('signal', result.get('prediction', 'N/A')) }}
     </div>
     {% if result.get('confidence') %}
-    <div class="signal-confidence">Confiance : {{ "%.1f"|format(result.confidence * 100) }}%</div>
+    <div class="signal-confidence" id="signal-confidence">Confiance : {{ "%.1f"|format(result.confidence * 100) }}%</div>
     {% endif %}
     {% if result.get('model_version') %}
     <div class="signal-confidence">Modele : {{ result.model_version }}</div>
     {% endif %}
 </div>
+{% else %}
+<div class="signal-result" id="signal-result" style="display:none;">
+    <div class="signal-label">Signal predit</div>
+    <div class="signal-value" id="signal-value"></div>
+    <div class="signal-confidence" id="signal-confidence"></div>
+</div>
 {% endif %}
+
+<script>
+document.getElementById('btn-autofill').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-autofill');
+    const info = document.getElementById('autofill-info');
+    const errBox = document.getElementById('js-error-box');
+    errBox.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Chargement...';
+
+    try {
+        // 1. Fetch a random candle
+        const candleResp = await fetch('/api/sample_candle');
+        if (!candleResp.ok) throw new Error('Impossible de charger une bougie');
+        const candle = await candleResp.json();
+
+        // Fill the form inputs
+        const features = {{ features | tojson }};
+        features.forEach(f => {
+            const input = document.getElementById(f);
+            if (input && candle[f] !== undefined) {
+                input.value = candle[f];
+                input.style.borderColor = 'var(--blue)';
+                setTimeout(() => input.style.borderColor = '', 1500);
+            }
+        });
+
+        info.textContent = candle.timestamp + '  |  Close: ' + candle.close;
+
+        // 2. Predict
+        const payload = {};
+        features.forEach(f => { payload[f] = candle[f] || 0; });
+
+        const predResp = await fetch('/api/predict', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+
+        if (!predResp.ok) throw new Error('Erreur prediction (API non disponible?)');
+        const pred = await predResp.json();
+
+        // 3. Display result
+        const resultDiv = document.getElementById('signal-result');
+        const valueDiv = document.getElementById('signal-value');
+        const confDiv = document.getElementById('signal-confidence');
+
+        const signal = pred.signal || pred.prediction || 'N/A';
+        const colors = { BUY: 'var(--accent)', SELL: 'var(--red)', HOLD: 'var(--text2)' };
+        valueDiv.textContent = signal;
+        valueDiv.style.color = colors[signal] || 'var(--text2)';
+
+        if (pred.confidence) {
+            confDiv.textContent = 'Confiance : ' + (pred.confidence * 100).toFixed(1) + '%';
+        } else {
+            confDiv.textContent = '';
+        }
+        resultDiv.style.display = '';
+
+    } catch (e) {
+        errBox.textContent = e.message;
+        errBox.style.display = '';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#9889; Simuler une bougie';
+    }
+});
+</script>
 
 <div class="content-card">
     <h2>Informations</h2>

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Simulation Live – GBP/USD{% endblock %}
+{% block content %}
+<h1>Simulation Live</h1>
+
+<div class="content-card" style="margin-bottom:20px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <button id="btn-play" class="btn btn-primary" disabled>&#9654; Play</button>
+        <button id="btn-pause" class="btn" style="background:var(--yellow);color:#000;" disabled>&#10074;&#10074; Pause</button>
+        <button id="btn-reset" class="btn" style="background:var(--red);color:#fff;" disabled>&#8634; Reset</button>
+        <label style="color:var(--text2);font-size:13px;margin-left:16px;">
+            Vitesse :
+            <input type="range" id="speed-slider" min="1" max="200" value="20"
+                   style="vertical-align:middle;width:140px;">
+            <span id="speed-label">20</span> bougies/s
+        </label>
+        <span id="counter" style="color:var(--text2);font-size:13px;margin-left:auto;">Chargement...</span>
+    </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid" id="kpi-grid">
+    <div class="kpi-card">
+        <div class="label">Capital</div>
+        <div class="value green" id="kpi-capital">10 000.00 EUR</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">PnL cumule</div>
+        <div class="value" id="kpi-pnl" style="color:var(--text2);">0.00 EUR</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Nb trades</div>
+        <div class="value blue" id="kpi-trades">0</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Derniere action</div>
+        <div class="value" id="kpi-action" style="font-size:20px;">-</div>
+    </div>
+    <div class="kpi-card">
+        <div class="label">Max Drawdown</div>
+        <div class="value red" id="kpi-dd">0.00 EUR</div>
+    </div>
+</div>
+
+<!-- Current candle info -->
+<div class="content-card" id="candle-info" style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin-bottom:20px;">
+    <div><span style="color:var(--text2);font-size:12px;">TIMESTAMP</span><br><strong id="info-ts">-</strong></div>
+    <div><span style="color:var(--text2);font-size:12px;">CLOSE</span><br><strong id="info-close">-</strong></div>
+    <div><span style="color:var(--text2);font-size:12px;">ACTION</span><br><span id="info-action" class="badge badge-yellow">-</span></div>
+    <div><span style="color:var(--text2);font-size:12px;">PNL BOUGIE</span><br><strong id="info-pnl">-</strong></div>
+</div>
+
+<!-- Chart -->
+<div class="chart-box">
+    <div id="chart" style="height:420px;"></div>
+</div>
+
+<script>
+(function() {
+    let data = [];
+    let idx = 0;
+    let timer = null;
+    let maxCapital = 10000;
+
+    const btnPlay = document.getElementById('btn-play');
+    const btnPause = document.getElementById('btn-pause');
+    const btnReset = document.getElementById('btn-reset');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedLabel = document.getElementById('speed-label');
+    const counter = document.getElementById('counter');
+
+    // Speed slider
+    speedSlider.addEventListener('input', () => {
+        speedLabel.textContent = speedSlider.value;
+        if (timer) { stop(); play(); }
+    });
+
+    // Load data
+    fetch('/api/simulation_data')
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { counter.textContent = 'Erreur: ' + d.error; return; }
+            data = d;
+            counter.textContent = 'Bougie 0 / ' + data.length;
+            btnPlay.disabled = false;
+            btnReset.disabled = false;
+            initChart();
+        })
+        .catch(() => { counter.textContent = 'Erreur chargement donnees'; });
+
+    function initChart() {
+        Plotly.newPlot('chart', [{
+            x: [],
+            y: [],
+            mode: 'lines',
+            name: 'Capital',
+            line: { color: '#e6edf3', width: 2 },
+        }], {
+            template: 'plotly_dark',
+            paper_bgcolor: '#000',
+            plot_bgcolor: '#000',
+            margin: { l: 50, r: 20, t: 30, b: 40 },
+            yaxis: { title: 'Capital (EUR)', range: [8000, 12000] },
+            xaxis: { title: '' },
+            shapes: [{
+                type: 'line', x0: 0, x1: 1, xref: 'paper',
+                y0: 10000, y1: 10000,
+                line: { color: '#555', dash: 'dash', width: 1 },
+            }],
+        }, { responsive: true });
+    }
+
+    function updateKPIs(row) {
+        const cap = row.capital;
+        const pnl = cap - 10000;
+        maxCapital = Math.max(maxCapital, cap);
+        const dd = Math.min(0, cap - maxCapital);
+
+        document.getElementById('kpi-capital').textContent = cap.toFixed(2) + ' EUR';
+        document.getElementById('kpi-capital').style.color = cap >= 10000 ? 'var(--accent)' : 'var(--red)';
+
+        const pnlEl = document.getElementById('kpi-pnl');
+        pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' EUR';
+        pnlEl.style.color = pnl >= 0 ? 'var(--accent)' : 'var(--red)';
+
+        document.getElementById('kpi-dd').textContent = dd.toFixed(2) + ' EUR';
+
+        // Count trades up to current index
+        let trades = 0;
+        for (let i = 0; i <= idx; i++) {
+            if (data[i].action !== 'HOLD') trades++;
+        }
+        document.getElementById('kpi-trades').textContent = trades;
+
+        const actionEl = document.getElementById('kpi-action');
+        const colors = { BUY: 'var(--accent)', SELL: 'var(--red)', HOLD: 'var(--text2)' };
+        actionEl.textContent = row.action;
+        actionEl.style.color = colors[row.action] || 'var(--text2)';
+
+        // Candle info
+        document.getElementById('info-ts').textContent = row.timestamp;
+        document.getElementById('info-close').textContent = row.close.toFixed(5);
+        const actionBadge = document.getElementById('info-action');
+        actionBadge.textContent = row.action;
+        actionBadge.className = 'badge badge-' + (row.action === 'BUY' ? 'green' : row.action === 'SELL' ? 'red' : 'yellow');
+        const pnlBougie = document.getElementById('info-pnl');
+        pnlBougie.textContent = (row.pnl_eur >= 0 ? '+' : '') + row.pnl_eur.toFixed(4) + ' EUR';
+        pnlBougie.style.color = row.pnl_eur >= 0 ? 'var(--accent)' : 'var(--red)';
+    }
+
+    function step() {
+        const speed = parseInt(speedSlider.value);
+        const batchSize = Math.max(1, Math.floor(speed / 20));
+        const end = Math.min(idx + batchSize, data.length);
+
+        const xs = [];
+        const ys = [];
+        for (let i = idx; i < end; i++) {
+            xs.push(data[i].timestamp);
+            ys.push(data[i].capital);
+        }
+
+        if (xs.length > 0) {
+            Plotly.extendTraces('chart', { x: [xs], y: [ys] }, [0]);
+        }
+
+        idx = end;
+        const row = data[idx - 1];
+        updateKPIs(row);
+        counter.textContent = 'Bougie ' + idx + ' / ' + data.length;
+
+        if (idx >= data.length) {
+            stop();
+            btnPlay.disabled = true;
+            counter.textContent += ' (termine)';
+        }
+    }
+
+    function play() {
+        const speed = parseInt(speedSlider.value);
+        const interval = Math.max(10, Math.floor(1000 / speed));
+        timer = setInterval(step, interval);
+        btnPlay.disabled = true;
+        btnPause.disabled = false;
+    }
+
+    function stop() {
+        if (timer) { clearInterval(timer); timer = null; }
+        btnPlay.disabled = (idx >= data.length);
+        btnPause.disabled = true;
+    }
+
+    function reset() {
+        stop();
+        idx = 0;
+        maxCapital = 10000;
+        counter.textContent = 'Bougie 0 / ' + data.length;
+        document.getElementById('kpi-capital').textContent = '10 000.00 EUR';
+        document.getElementById('kpi-capital').style.color = 'var(--accent)';
+        document.getElementById('kpi-pnl').textContent = '0.00 EUR';
+        document.getElementById('kpi-pnl').style.color = 'var(--text2)';
+        document.getElementById('kpi-trades').textContent = '0';
+        document.getElementById('kpi-dd').textContent = '0.00 EUR';
+        document.getElementById('kpi-action').textContent = '-';
+        document.getElementById('info-ts').textContent = '-';
+        document.getElementById('info-close').textContent = '-';
+        document.getElementById('info-action').textContent = '-';
+        document.getElementById('info-pnl').textContent = '-';
+        initChart();
+        btnPlay.disabled = false;
+    }
+
+    btnPlay.addEventListener('click', play);
+    btnPause.addEventListener('click', stop);
+    btnReset.addEventListener('click', reset);
+})();
+</script>
+{% endblock %}
