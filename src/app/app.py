@@ -66,7 +66,7 @@ def _get_best_model():
 @app.route("/")
 def home():
     model = _get_best_model()
-    test_metrics = model.get("metrics", {}).get("test_2024", {})
+    test_metrics = model.get("metrics", {}).get("test_2025_2026", {})
 
     sim = _read_csv(REPORTS_DIR / "simulation" / "simulation_10k_history.csv")
 
@@ -204,7 +204,8 @@ def performance():
         metrics["max_dd_eur"] = round(
             (sim["capital"] - sim["capital"].cummax()).min(), 2
         )
-        metrics["nb_trades"] = int((sim["action"] != "HOLD").sum())
+        pos_series = sim["action"].map({"HOLD": 0, "BUY": 1, "SELL": -1})
+        metrics["nb_trades"] = int((pos_series.diff().fillna(0) != 0).sum())
         metrics["total_costs"] = round(sim["trade_cost"].sum(), 2)
 
     # Comparison vs Buy & Hold (2024 Test only)

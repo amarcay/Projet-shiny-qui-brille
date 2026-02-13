@@ -32,7 +32,8 @@
     </div>
     <div class="kpi-card">
         <div class="label">Modele actif</div>
-        <div class="value green" style="font-size:20px;">{{ kpis.get('model_name', 'N/A') }} ({{ kpis.get('version', '') }})</div>
+        <div class="value green" style="font-size:20px;">{{ kpis.get('model_name', 'N/A') }} ({{ kpis.get('version', '')
+            }})</div>
     </div>
 </div>
 
@@ -42,7 +43,7 @@
 </div>
 <script>
     var data = JSON.parse('{{ chart_json | safe }}');
-    Plotly.newPlot('home-chart', data.data, data.layout, {responsive: true});
+    Plotly.newPlot('home-chart', data.data, data.layout, { responsive: true });
 </script>
 {% endif %}
 
