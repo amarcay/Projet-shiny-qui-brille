@@ -53,7 +53,7 @@ Le modèle s'appuie sur une combinaison d'indicateurs de momentum, de volatilit�
 
 ## 🏆 Résultats et Choix du Modèle
 
-Les modèles sont comparés sur l'année de **Test (2024)**, totalement inconnue lors de l'entraînement.
+Les modèles sont comparés sur la période de **Test (2025 & 2026)**, totalement inconnue lors de l'entraînement.
 
 | Version | Modèle | Approche | Profit | Sharpe | Max Drawdown | Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -69,7 +69,7 @@ L'approche par renforcement a démontré une "intelligence" de gestion supérieu
 
 ## 💶 Simulation Réaliste (10k€)
 
-Le script `src/app/simulation_10k.py` simule le comportement du modèle v2 sur un portefeuille de **10 000€** en 2024 avec :
+Le script `src/app/simulation_10k.py` simule le comportement du modèle v2 sur un portefeuille de **10 000€** en **2025 & 2026** avec :
 *   Levier 1:30 (typique retail).
 *   Taille de position : 1 mini-lot (10k unités).
 *   Spread : 1 pip (coût réaliste).
@@ -83,8 +83,8 @@ Les résultats de cette simulation (courbe de capital, drawdown, stats mensuelle
 ### 1. Installation
 
 ```bash
-# Via Poetry (recommandé)
-poetry install
+# Via uv (recommandé)
+uv sync
 ```
 
 ### 2. Exécution du Pipeline (Entraînement complet)

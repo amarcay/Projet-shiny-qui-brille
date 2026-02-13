@@ -105,7 +105,7 @@ def home():
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             margin=dict(l=50, r=20, t=40, b=40),
-            title="Simulation 10 000 EUR – 2024 (Test)",
+            title="Simulation 10 000 EUR – 2025/2026",
             yaxis_title="Capital (EUR)",
             xaxis_title="",
             height=420,
