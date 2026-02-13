@@ -83,7 +83,9 @@ def main():
         next_close = next_row["close_15m"]
 
         # Observation (21 dims: 19 features + position + steps_in_position/100)
-        obs = np.append(features_norm[i], [position, steps_in_position / 100.0]).astype(np.float32)
+        # Cap steps_in_position to match training distribution (INACTIVITY_THRESHOLD=50)
+        capped_steps = min(steps_in_position, 50)
+        obs = np.append(features_norm[i], [position, capped_steps / 100.0]).astype(np.float32)
         action, _ = model.predict(obs, deterministic=True)
         action = int(action)
 
