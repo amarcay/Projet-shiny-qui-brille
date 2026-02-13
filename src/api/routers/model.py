@@ -17,6 +17,7 @@ def model_info():
     return ModelInfoResponse(
         version=registry.version,
         model_type=registry.model_type,
+        model_name=registry.model_name,
         features=registry.feature_cols or [],
         available_versions=registry.list_versions(),
         loaded_at=registry.loaded_at,

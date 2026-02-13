@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -68,7 +68,7 @@ def _get_best_model():
 @app.route("/")
 def home():
     model = _get_best_model()
-    test_metrics = model.get("metrics", {}).get("test_2024", {})
+    test_metrics = model.get("metrics", {}).get("test_2025_2026", {})
 
     sim = _read_csv(REPORTS_DIR / "simulation" / "simulation_10k_history.csv")
 
@@ -134,7 +134,7 @@ def home():
             paper_bgcolor="#000",
             plot_bgcolor="#000",
             margin=dict(l=50, r=20, t=40, b=40),
-            title="Simulation 10 000 EUR - 2024 (Test)",
+            title="Simulation 10 000 EUR - 2025-2026 (Test)",
             yaxis_title="Capital (EUR)",
             yaxis_range=[8000, 12000],
             xaxis_title="",
@@ -259,7 +259,7 @@ def performance():
     # Comparison vs Buy & Hold (2024 Test only)
     comparison = []
     if not ev.empty:
-        test_rows = ev[ev["Split"] == "2024 (Test)"]
+        test_rows = ev[ev["Split"] == "2025 & 2026 (Test)"]
         for _, row in test_rows.iterrows():
             strat = row["Strategie"] if "Strategie" in row.index else row.get("Strat\u00e9gie", "")
             if strat in (strategy_name, "Buy & Hold"):
@@ -327,6 +327,63 @@ def signal():
 def technology():
     model = _get_best_model()
     return render_template("technology.html", model=model)
+
+
+# ---------------------------------------------------------------------------
+# API endpoints for auto-fill & simulation
+# ---------------------------------------------------------------------------
+@app.route("/api/sample_candle")
+def api_sample_candle():
+    """Return a random candle from the test set (2025+) with all features."""
+    features_path = DATA_DIR / "features" / "gbpusd_m15_features.csv"
+    df = _read_csv(features_path, parse_dates=["timestamp_15m"])
+    if df.empty:
+        return jsonify({"error": "Features file not found"}), 404
+
+    test = df[df["timestamp_15m"] >= "2025-01-01"]
+    if test.empty:
+        return jsonify({"error": "No test data available"}), 404
+
+    row = test.sample(1).iloc[0]
+    model = _get_best_model()
+    features = model.get("features", [])
+
+    result = {
+        "timestamp": str(row["timestamp_15m"]),
+        "close": round(float(row["close_15m"]), 5),
+    }
+    for f in features:
+        if f in row.index:
+            result[f] = float(row[f])
+    return jsonify(result)
+
+
+@app.route("/api/predict", methods=["POST"])
+def api_predict():
+    """Proxy POST to FastAPI /predict (avoids CORS issues from JS)."""
+    try:
+        resp = requests.post(
+            f"{FASTAPI_URL}/predict",
+            json=request.get_json(force=True),
+            timeout=5,
+        )
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "FastAPI not available on port 8000"}), 503
+
+
+@app.route("/api/simulation_data")
+def api_simulation_data():
+    """Return the simulation CSV as JSON array."""
+    sim = _read_csv(REPORTS_DIR / "simulation" / "simulation_10k_history.csv")
+    if sim.empty:
+        return jsonify({"error": "Simulation file not found"}), 404
+    return jsonify(sim.to_dict(orient="records"))
+
+
+@app.route("/simulation")
+def simulation():
+    return render_template("simulation.html")
 
 
 # ---------------------------------------------------------------------------

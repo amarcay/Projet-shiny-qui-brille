@@ -4,9 +4,9 @@ Objectif : predire le mouvement de la prochaine bougie.
   y = 1 si close_{t+1} > close_t, 0 sinon
 
 Split temporel strict :
-  - 2022 : Entrainement
-  - 2023 : Validation
-  - 2024 : Test final (jamais utilise pour entrainer)
+  - 2022 & 2023 : Entrainement
+  - 2024 : Validation
+  - 2025 & 2026 : Test final (jamais utilise pour entrainer)
 
 Modeles :
   - Baseline : DummyClassifier (most_frequent)
@@ -62,9 +62,9 @@ def load_and_prepare() -> pd.DataFrame:
 def split_temporal(df: pd.DataFrame):
     """Split temporel strict par annee."""
     df["year"] = df["timestamp_15m"].dt.year
-    train = df[df["year"] == 2022].copy()
-    val = df[df["year"] == 2023].copy()
-    test = df[df["year"] == 2024].copy()
+    train = df[(df["year"] == 2022) | (df["year"] == 2023)].copy()
+    val = df[df["year"] == 2024].copy()
+    test = df[(df["year"] == 2025) | (df["year"] == 2026)].copy()
     for d in [train, val, test]:
         d.drop(columns=["year"], inplace=True)
     df.drop(columns=["year"], inplace=True)
@@ -123,9 +123,9 @@ def main():
     # 2. Split
     print("\n[2] Split temporel strict...")
     train, val, test = split_temporal(df)
-    print(f"  Train (2022): {len(train)}")
-    print(f"  Val   (2023): {len(val)}")
-    print(f"  Test  (2024): {len(test)}")
+    print(f"  Train (2022 & 2023): {len(train)}")
+    print(f"  Val   (2024): {len(val)}")
+    print(f"  Test  (2025 & 2026): {len(test)}")
 
     X_train, y_train = get_Xy(train)
     X_val, y_val = get_Xy(val)

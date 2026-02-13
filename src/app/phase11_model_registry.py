@@ -89,9 +89,9 @@ def register_model(
         "features": features,
         "artifacts": artifacts,
         "metrics": {
-            "train_2022": metrics_train,
-            "valid_2023": metrics_valid,
-            "test_2024": metrics_test,
+            "train_2022_2023": metrics_train,
+            "valid_2024": metrics_valid,
+            "test_2025_2026": metrics_test,
         },
     }
 
@@ -105,14 +105,14 @@ def register_model(
 
 
 def select_best_model():
-    """Sélectionne la meilleure version par Sharpe sur validation 2023."""
+    """Sélectionne la meilleure version par Sharpe sur validation 2024."""
     registry = load_registry()
 
     best_version = None
     best_sharpe = -np.inf
 
     for version, info in registry["models"].items():
-        sharpe_valid = info["metrics"]["valid_2023"]["sharpe"]
+        sharpe_valid = info["metrics"]["valid_2024"]["sharpe"]
         print(f"    {version} ({info['model_name']}): Sharpe valid = {sharpe_valid:.3f}")
         if sharpe_valid > best_sharpe:
             best_sharpe = sharpe_valid
@@ -330,11 +330,103 @@ def register_v2_rl(df_train, df_valid, df_test):
 
 
 # ══════════════════════════════════════════════
+# Enregistrement v3 : RL (DQN) avec reward shaping
+# ══════════════════════════════════════════════
+def register_v3_rl(df_train, df_valid, df_test):
+    """Entraîne un DQN v3 avec reward shaping et obs enrichie, enregistre en v3."""
+    print("\n  [v3] DQN v3 – reward shaping + obs enrichie (RL)...")
+
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from phase8_rl import TradingEnv
+
+    version_dir = MODELS_DIR / "v3"
+    version_dir.mkdir(parents=True, exist_ok=True)
+
+    # Normalisation
+    feature_mean = df_train[RL_FEATURE_COLS].mean()
+    feature_std = df_train[RL_FEATURE_COLS].std()
+
+    env_train = TradingEnv(df_train, feature_mean, feature_std)
+
+    # Hyperparamètres v3
+    hyperparams = {
+        "learning_rate": 3e-4,
+        "buffer_size": 200_000,
+        "learning_starts": 2_000,
+        "batch_size": 256,
+        "gamma": 0.99,
+        "exploration_fraction": 0.5,
+        "exploration_initial_eps": 1.0,
+        "exploration_final_eps": 0.05,
+        "target_update_interval": 500,
+        "train_freq": 4,
+        "net_arch": [256, 128],
+        "seed": SEED,
+        "total_timesteps": len(df_train) * 15,
+    }
+
+    model = DQN(
+        "MlpPolicy", env_train,
+        learning_rate=hyperparams["learning_rate"],
+        buffer_size=hyperparams["buffer_size"],
+        learning_starts=hyperparams["learning_starts"],
+        batch_size=hyperparams["batch_size"],
+        gamma=hyperparams["gamma"],
+        exploration_fraction=hyperparams["exploration_fraction"],
+        exploration_initial_eps=hyperparams["exploration_initial_eps"],
+        exploration_final_eps=hyperparams["exploration_final_eps"],
+        target_update_interval=hyperparams["target_update_interval"],
+        train_freq=hyperparams["train_freq"],
+        policy_kwargs={"net_arch": hyperparams["net_arch"]},
+        seed=SEED,
+        verbose=0,
+    )
+
+    print(f"    Entraînement: {hyperparams['total_timesteps']} timesteps...")
+    model.learn(total_timesteps=hyperparams["total_timesteps"], progress_bar=True)
+
+    # Sauvegarder artefacts
+    model.save(str(version_dir / "dqn_gbpusd_m15"))
+    joblib.dump({"mean": feature_mean, "std": feature_std}, version_dir / "norm_stats.joblib")
+
+    # Évaluer sur chaque split
+    metrics = {}
+    for name, split_df in [("train", df_train), ("valid", df_valid), ("test", df_test)]:
+        env = TradingEnv(split_df, feature_mean, feature_std)
+        obs, _ = env.reset()
+        signals = []
+        while True:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, _, terminated, truncated, info = env.step(int(action))
+            signals.append(info["position"])
+            if terminated or truncated:
+                break
+        while len(signals) < len(split_df):
+            signals.append(signals[-1])
+        metrics[name] = financial_eval(split_df, np.array(signals[:len(split_df)]))
+
+    register_model(
+        version="v3",
+        model_type="stable-baselines3",
+        model_name="DQN v3",
+        hyperparams=hyperparams,
+        metrics_train=metrics["train"],
+        metrics_valid=metrics["valid"],
+        metrics_test=metrics["test"],
+        features=RL_FEATURE_COLS,
+        artifacts=["dqn_gbpusd_m15.zip", "norm_stats.joblib"],
+    )
+
+    return metrics
+
+
+# ══════════════════════════════════════════════
 # Main
 # ══════════════════════════════════════════════
 def main():
     print("=" * 70)
-    print("PHASE 11 – Versioning modèle (registry v1/v2)")
+    print("PHASE 11 – Versioning modèle (registry v1/v2/v3)")
     print("=" * 70)
 
     # Chargement
@@ -342,9 +434,9 @@ def main():
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp_15m"])
     df["year"] = df["timestamp_15m"].dt.year
 
-    df_train = df[df["year"] == 2022].copy()
-    df_valid = df[df["year"] == 2023].copy()
-    df_test = df[df["year"] == 2024].copy()
+    df_train = df[(df["year"] == 2022) | (df["year"] == 2023)].copy()
+    df_valid = df[df["year"] == 2024].copy()
+    df_test = df[(df["year"] == 2025) | (df["year"] == 2026)].copy()
 
     print(f"  Train: {len(df_train)} | Valid: {len(df_valid)} | Test: {len(df_test)}")
 
@@ -354,6 +446,9 @@ def main():
 
     # ── v2 : RL amélioré ──
     metrics_v2 = register_v2_rl(df_train, df_valid, df_test)
+
+    # ── v3 : RL avec reward shaping ──
+    metrics_v3 = register_v3_rl(df_train, df_valid, df_test)
 
     # ── Sélection du meilleur modèle ──
     print("\n[3] Sélection du meilleur modèle (par Sharpe validation)...")
@@ -365,8 +460,8 @@ def main():
     print(f"{'=' * 70}")
 
     rows = []
-    for version, metrics in [("v1", metrics_v1), ("v2", metrics_v2)]:
-        for split, split_name in [("train", "2022 (Train)"), ("valid", "2023 (Valid)"), ("test", "2024 (Test)")]:
+    for version, metrics in [("v1", metrics_v1), ("v2", metrics_v2), ("v3", metrics_v3)]:
+        for split, split_name in [("train", "2022 & 2023 (Train)"), ("valid", "2024 (Valid)"), ("test", "2025 & 2026 (Test)")]:
             m = metrics[split]
             rows.append({
                 "Version": version,
@@ -386,7 +481,7 @@ def main():
     print(f"  Version chargée: {info['version']}")
     print(f"  Type: {info['model_type']}")
     print(f"  Modèle: {info['model_name']}")
-    print(f"  Sharpe valid: {info['metrics']['valid_2023']['sharpe']:.3f}")
+    print(f"  Sharpe valid: {info['metrics'].get('valid_2024', {}).get('sharpe', 'N/A')}")
 
     # ── Contenu du registry ──
     print(f"\n[5] Contenu du registry:")
@@ -399,7 +494,7 @@ def main():
 
     print(f"\n  Fichiers générés:")
     print(f"    {REGISTRY_PATH}")
-    for v in ["v1", "v2"]:
+    for v in ["v1", "v2", "v3"]:
         vdir = MODELS_DIR / v
         for f in sorted(vdir.iterdir()):
             print(f"    {f}")

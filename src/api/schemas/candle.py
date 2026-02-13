@@ -1,6 +1,7 @@
 """Schemas Pydantic pour les bougies M15."""
 
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +25,8 @@ class CandleInput(BaseModel):
     adx_14: float = Field(..., description="ADX 14 periodes")
     macd: float = Field(..., description="MACD")
     macd_signal: float = Field(..., description="Signal MACD")
+    ema_20: Optional[float] = Field(None, description="EMA 20 periodes (v2/v3)")
+    ema_50: Optional[float] = Field(None, description="EMA 50 periodes (v2/v3)")
 
 
 class BatchInput(BaseModel):

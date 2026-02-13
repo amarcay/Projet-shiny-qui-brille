@@ -164,14 +164,14 @@ def main():
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp_15m"])
     df["year"] = df["timestamp_15m"].dt.year
 
-    df_train = df[df["year"] == 2022].copy()
-    df_valid = df[df["year"] == 2023].copy()
-    df_test = df[df["year"] == 2024].copy()
+    df_train = df[(df["year"] == 2022) | (df["year"] == 2023)].copy()
+    df_valid = df[df["year"] == 2024].copy()
+    df_test = df[(df["year"] == 2025) | (df["year"] == 2026)].copy()
 
     splits = {
-        "2022 (Train)": df_train,
-        "2023 (Valid)": df_valid,
-        "2024 (Test)": df_test,
+        "2022 & 2023 (Train)": df_train,
+        "2024 (Valid)": df_valid,
+        "2025 & 2026 (Test)": df_test,
     }
 
     for name, s in splits.items():
@@ -255,27 +255,27 @@ def main():
     results_df = pd.DataFrame(all_results)
     print(results_df.to_string(index=False))
 
-    # ── Focus 2024 (Test) : robustesse ──
+    # ── Focus 2025 & 2026 (Test) : robustesse ──
     print(f"\n{'=' * 70}")
-    print("  FOCUS 2024 (TEST) – ROBUSTESSE")
+    print("  FOCUS 2025 & 2026 (TEST) – ROBUSTESSE")
     print(f"{'=' * 70}")
-    test_df = results_df[results_df["Split"] == "2024 (Test)"].copy()
+    test_df = results_df[results_df["Split"] == "2025 & 2026 (Test)"].copy()
     test_df = test_df.sort_values("Sharpe", ascending=False)
     print(test_df[["Stratégie", "Profit cumulé", "Max drawdown", "Sharpe", "Profit factor"]].to_string(index=False))
 
     # Verdict
     best = test_df.iloc[0]
-    print(f"\n  Meilleure stratégie sur 2024 (par Sharpe): {best['Stratégie']}")
+    print(f"\n  Meilleure stratégie sur 2025 & 2026 (par Sharpe): {best['Stratégie']}")
     print(f"    Profit: {best['Profit cumulé']:+.6f}  |  Sharpe: {best['Sharpe']:+.3f}  |  MaxDD: {best['Max drawdown']:.6f}")
 
     # Validité : Sharpe > 0 et Profit > 0
     valid_models = test_df[(test_df["Sharpe"] > 0) & (test_df["Profit cumulé"] > 0)]
     if len(valid_models) > 0:
-        print(f"\n  Modèles VALIDES sur 2024 (Sharpe > 0 & Profit > 0):")
+        print(f"\n  Modèles VALIDES sur 2025 & 2026 (Sharpe > 0 & Profit > 0):")
         for _, row in valid_models.iterrows():
             print(f"    ✓ {row['Stratégie']}")
     else:
-        print(f"\n  ⚠ Aucun modèle n'est robuste sur 2024 (tous Sharpe ≤ 0 ou Profit ≤ 0)")
+        print(f"\n  ⚠ Aucun modèle n'est robuste sur 2025 & 2026 (tous Sharpe ≤ 0 ou Profit ≤ 0)")
         print("    → Pistes d'amélioration : plus de features, tuning hyperparamètres,")
         print("      reward shaping RL, walk-forward, ensemble methods")
 
@@ -297,11 +297,11 @@ def main():
         m = backtest(df, signals)
         ax.plot(df["timestamp_15m"].values, m["cumulative"], label=strat_name, linewidth=1.0)
 
-    for year in [2023, 2024]:
+    for year in [2025, 2026]:
         ax.axvline(pd.Timestamp(f"{year}-01-01"), color="gray", linestyle="--", alpha=0.6, linewidth=0.8)
     ax.text(pd.Timestamp("2022-06-01"), ax.get_ylim()[1] * 0.95, "TRAIN", fontsize=10, color="gray")
-    ax.text(pd.Timestamp("2023-06-01"), ax.get_ylim()[1] * 0.95, "VALID", fontsize=10, color="gray")
-    ax.text(pd.Timestamp("2024-06-01"), ax.get_ylim()[1] * 0.95, "TEST", fontsize=10, color="gray")
+    ax.text(pd.Timestamp("2025-06-01"), ax.get_ylim()[1] * 0.95, "VALID", fontsize=10, color="gray")
+    ax.text(pd.Timestamp("2026-06-01"), ax.get_ylim()[1] * 0.95, "TEST", fontsize=10, color="gray")
 
     ax.set_title("Évaluation finale – PnL cumulé toutes stratégies (2022-2024)", fontsize=13)
     ax.set_xlabel("Date")
@@ -316,7 +316,7 @@ def main():
     # ── Heatmap résumé ──
     fig, ax = plt.subplots(figsize=(10, 6))
     pivot = results_df.pivot(index="Stratégie", columns="Split", values="Sharpe")
-    pivot = pivot[["2022 (Train)", "2023 (Valid)", "2024 (Test)"]]
+    pivot = pivot[["2022 & 2023 (Train)", "2024 (Valid)", "2025 & 2026 (Test)"]]
     im = ax.imshow(pivot.values, cmap="RdYlGn", aspect="auto")
     ax.set_xticks(range(len(pivot.columns)))
     ax.set_xticklabels(pivot.columns)

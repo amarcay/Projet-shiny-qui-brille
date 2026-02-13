@@ -89,7 +89,7 @@ def plot_volatility(df: pd.DataFrame):
 
     # Volatilité par année
     print("  Volatilité annualisée par année:")
-    for year in [2022, 2023, 2024]:
+    for year in [2022, 2023, 2024, 2025, 2026]:
         yearly = df[df.index.year == year]["log_return"].dropna()
         # M15 → 96 bougies/jour × 252 jours
         vol_annualized = yearly.std() * np.sqrt(252 * 96)

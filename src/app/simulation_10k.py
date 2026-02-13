@@ -41,16 +41,16 @@ RL_FEATURE_COLS = [
 
 def main():
     print("=" * 70)
-    print("SIMULATION – 10 000€ sur GBP/USD M15 (2024)")
+    print("SIMULATION – 10 000€ sur GBP/USD M15 (2025 & 2026)")
     print("=" * 70)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # ── Chargement données 2024 ──
-    print("\n[1] Chargement des données 2024...")
+    # ── Chargement données 2025 & 2026 ──
+    print("\n[1] Chargement des données 2025 & 2026...")
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp_15m"])
-    df_2024 = df[df["timestamp_15m"].dt.year == 2024].copy().reset_index(drop=True)
-    print(f"  {len(df_2024)} bougies M15")
+    df_2025_2026 = df[(df["timestamp_15m"].dt.year == 2025) | (df["timestamp_15m"].dt.year == 2026)].copy().reset_index(drop=True)
+    print(f"  {len(df_2025_2026)} bougies M15")
 
     # ── Chargement modèle v2 ──
     print("\n[2] Chargement du modèle v2 (DQN)...")
@@ -60,7 +60,7 @@ def main():
     feature_std = norm_stats["std"]
 
     # Normalisation des features
-    features_raw = df_2024[RL_FEATURE_COLS].values
+    features_raw = df_2025_2026[RL_FEATURE_COLS].values
     std_safe = feature_std.values.copy()
     std_safe[std_safe == 0] = 1.0
     features_norm = (features_raw - feature_mean.values) / std_safe
@@ -69,20 +69,23 @@ def main():
     print("\n[3] Simulation en cours...")
     capital = INITIAL_CAPITAL
     position = 0  # -1, 0, 1
+    steps_in_position = 0
     entry_price = 0.0
 
     # Historique
     history = []
 
-    for i in range(len(df_2024) - 1):
-        row = df_2024.iloc[i]
-        next_row = df_2024.iloc[i + 1]
+    for i in range(len(df_2025_2026) - 1):
+        row = df_2025_2026.iloc[i]
+        next_row = df_2025_2026.iloc[i + 1]
         timestamp = row["timestamp_15m"]
         close = row["close_15m"]
         next_close = next_row["close_15m"]
 
-        # Observation
-        obs = np.append(features_norm[i], position).astype(np.float32)
+        # Observation (21 dims: 19 features + position + steps_in_position/100)
+        # Cap steps_in_position to match training distribution (INACTIVITY_THRESHOLD=50)
+        capped_steps = min(steps_in_position, 50)
+        obs = np.append(features_norm[i], [position, capped_steps / 100.0]).astype(np.float32)
         action, _ = model.predict(obs, deterministic=True)
         action = int(action)
 
@@ -103,6 +106,9 @@ def main():
             trade_cost = SPREAD_COST * LOT_SIZE  # ≈ 1€ par trade (mini-lot)
             capital -= trade_cost
             entry_price = close
+            steps_in_position = 0
+        else:
+            steps_in_position += 1
 
         # PnL de la position courante (sur la bougie suivante)
         if position != 0:
@@ -203,7 +209,7 @@ def main():
                      where=hist_df["capital"] >= INITIAL_CAPITAL, alpha=0.15, color="green")
     ax.fill_between(hist_df["timestamp"], INITIAL_CAPITAL, hist_df["capital"],
                      where=hist_df["capital"] < INITIAL_CAPITAL, alpha=0.15, color="red")
-    ax.set_title(f"Simulation 10 000€ – GBP/USD M15 (2024) – DQN v2\n"
+    ax.set_title(f"Simulation 10 000€ – GBP/USD M15 (2025 & 2026) – DQN v2\n"
                  f"Capital final: {final_capital:,.2f}€ ({total_return:+.2f}%) | "
                  f"Max DD: {max_dd_pct:.2f}% | Sharpe: {sharpe_daily:.3f}", fontsize=12)
     ax.set_ylabel("Capital (€)")
@@ -213,7 +219,7 @@ def main():
 
     # 2. Prix GBP/USD
     ax = axes[1]
-    ax.plot(df_2024["timestamp_15m"].iloc[:-1], df_2024["close_15m"].iloc[:-1],
+    ax.plot(df_2025_2026["timestamp_15m"].iloc[:-1], df_2025_2026["close_15m"].iloc[:-1],
             linewidth=0.4, color="gray")
     ax.set_ylabel("GBP/USD")
     ax.set_title("Prix GBP/USD (close M15)")
@@ -230,14 +236,14 @@ def main():
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:,.0f}€"))
 
     fig.tight_layout()
-    fig.savefig(OUTPUT_DIR / "simulation_10k_2024.png", dpi=150)
+    fig.savefig(OUTPUT_DIR / "simulation_10k_2025_2026.png", dpi=150)
     plt.close(fig)
 
     # Sauvegarde CSV
     hist_df.to_csv(OUTPUT_DIR / "simulation_10k_history.csv", index=False)
 
     print(f"\n  Fichiers sauvegardés:")
-    print(f"    {OUTPUT_DIR / 'simulation_10k_2024.png'}")
+    print(f"    {OUTPUT_DIR / 'simulation_10k_2025_2026.png'}")
     print(f"    {OUTPUT_DIR / 'simulation_10k_history.csv'}")
 
     print("\n" + "=" * 70)

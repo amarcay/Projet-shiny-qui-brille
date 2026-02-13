@@ -14,12 +14,13 @@ CONCEPTION (obligatoire avant codage)
 2. Données
    - Source : data/features/gbpusd_m15_features.csv (19 features + OHLCV)
    - Qualité : nettoyé en Phase 3, features sans look-ahead (Phase 5)
-   - Split : 2022 train / 2023 valid / 2024 test
+   - Split : 2022 & 2023 train / 2024 valid / 2025 & 2026 test
 
 3. State (observation)
    - 19 features techniques normalisées (z-score sur fenêtre train)
    - Position courante encodée : {-1, 0, 1}
-   - Dimension : 20
+   - Steps dans la position courante / 100 (normalise)
+   - Dimension : 21
 
 4. Action (discret)
    - 0 = HOLD (ne rien changer)
@@ -57,6 +58,10 @@ MODEL_DIR = Path(__file__).resolve().parents[2] / "models"
 TRANSACTION_COST = 0.0001
 DRAWDOWN_PENALTY = 0.5
 DRAWDOWN_THRESHOLD = 0.02
+REWARD_SCALE = 10000
+POSITION_CHANGE_BONUS = 0.05
+INACTIVITY_PENALTY = 0.01
+INACTIVITY_THRESHOLD = 50
 SEED = 42
 
 FEATURE_COLS = [
@@ -95,26 +100,29 @@ class TradingEnv(gym.Env):
 
         self.n_steps = len(self.df)
 
-        # Spaces : 19 features + 1 position encoding = 20
+        # Spaces : 19 features + 1 position encoding + 1 steps_in_position = 21
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(len(FEATURE_COLS) + 1,), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=(len(FEATURE_COLS) + 2,), dtype=np.float32
         )
         # Actions : 0=HOLD, 1=BUY, 2=SELL
         self.action_space = spaces.Discrete(3)
 
         self.current_step = 0
         self.position = 0  # -1, 0, 1
+        self.steps_in_position = 0
         self.cumulative_pnl = 0.0
         self.peak_pnl = 0.0
 
     def _get_obs(self):
-        obs = np.append(self.features_norm[self.current_step], self.position)
+        obs = np.append(self.features_norm[self.current_step],
+                        [self.position, self.steps_in_position / 100.0])
         return obs.astype(np.float32)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.current_step = 0
         self.position = 0
+        self.steps_in_position = 0
         self.cumulative_pnl = 0.0
         self.peak_pnl = 0.0
         return self._get_obs(), {}
@@ -126,6 +134,14 @@ class TradingEnv(gym.Env):
 
         # Coût de transaction si changement de position
         cost = TRANSACTION_COST * abs(new_position - self.position)
+
+        # Tracker changement de position
+        position_changed = new_position != self.position
+        if position_changed:
+            self.steps_in_position = 0
+        else:
+            self.steps_in_position += 1
+
         self.position = new_position
 
         # PnL du step
@@ -137,10 +153,21 @@ class TradingEnv(gym.Env):
         self.peak_pnl = max(self.peak_pnl, self.cumulative_pnl)
         drawdown = self.peak_pnl - self.cumulative_pnl
 
-        # Reward = PnL - pénalité drawdown
-        reward = pnl
+        # Reward shaping : PnL scalé + bonus/pénalités
+        scaled_pnl = pnl * REWARD_SCALE
+        reward = scaled_pnl
+
+        # Bonus pour changement de position (évite politique dégénérée)
+        if position_changed:
+            reward += POSITION_CHANGE_BONUS
+
+        # Pénalité d'inactivité (même position trop longtemps)
+        if self.steps_in_position > INACTIVITY_THRESHOLD:
+            reward -= INACTIVITY_PENALTY
+
+        # Pénalité drawdown (sur drawdown brut, non scalé)
         if drawdown > DRAWDOWN_THRESHOLD:
-            reward -= DRAWDOWN_PENALTY * (drawdown - DRAWDOWN_THRESHOLD)
+            reward -= DRAWDOWN_PENALTY * (drawdown - DRAWDOWN_THRESHOLD) * REWARD_SCALE
 
         self.current_step += 1
         terminated = self.current_step >= self.n_steps - 1
@@ -151,6 +178,7 @@ class TradingEnv(gym.Env):
             "cumulative_pnl": self.cumulative_pnl,
             "drawdown": drawdown,
             "position": self.position,
+            "steps_in_position": self.steps_in_position,
         }
 
 
@@ -260,13 +288,13 @@ def main():
     df = pd.read_csv(DATA_PATH, parse_dates=["timestamp_15m"])
     df["year"] = df["timestamp_15m"].dt.year
 
-    df_train = df[df["year"] == 2022].copy()
-    df_valid = df[df["year"] == 2023].copy()
-    df_test = df[df["year"] == 2024].copy()
+    df_train = df[(df["year"] == 2022) | (df["year"] == 2023)].copy()
+    df_valid = df[df["year"] == 2024].copy()
+    df_test = df[(df["year"] == 2025) | (df["year"] == 2026)].copy()
 
-    print(f"  Train (2022): {len(df_train)} steps")
-    print(f"  Valid (2023): {len(df_valid)} steps")
-    print(f"  Test  (2024): {len(df_test)} steps")
+    print(f"  Train (2022 & 2023): {len(df_train)} steps")
+    print(f"  Valid (2024): {len(df_valid)} steps")
+    print(f"  Test  (2025 & 2026): {len(df_test)} steps")
 
     # ── Normalisation (calculée uniquement sur train) ──
     print("\n[2] Normalisation des features (z-score sur 2022)...")
@@ -323,7 +351,7 @@ def main():
     # ── Évaluation ──
     print("\n[6] Évaluation...")
     results = {}
-    for name, env in [("2022 (Train)", env_train), ("2023 (Valid)", env_valid), ("2024 (Test)", env_test)]:
+    for name, env in [("2022 & 2023 (Train)", env_train), ("2024 (Valid)", env_valid), ("2025 & 2026 (Test)", env_test)]:
         results[name] = run_backtest(model, env)
         print_metrics(name, results[name])
         print()

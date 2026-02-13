@@ -141,9 +141,9 @@ def main():
 
     # Split temporel
     splits = {
-        "2022 (Train)": df[df["year"] == 2022].copy(),
-        "2023 (Valid)": df[df["year"] == 2023].copy(),
-        "2024 (Test)": df[df["year"] == 2024].copy(),
+        "2022 & 2023 (Train)": df[(df["year"] == 2022) | (df["year"] == 2023)].copy(),
+        "2024 (Valid)": df[df["year"] == 2024].copy(),
+        "2025 & 2026 (Test)": df[(df["year"] == 2025) | (df["year"] == 2026)].copy(),
     }
     for name, subset in splits.items():
         print(f"  {name}: {len(subset)} bougies")
@@ -214,9 +214,9 @@ def main():
             label=strat_name,
             linewidth=1.2,
         )
-    for year in [2023, 2024]:
+    for year in [2024]:
         ax.axvline(pd.Timestamp(f"{year}-01-01"), color="gray", linestyle="--", alpha=0.5)
-    ax.set_title("PnL cumulé – Toutes périodes (2022-2024)")
+    ax.set_title("PnL cumulé – Toutes périodes (2022-2026)")
     ax.set_xlabel("Date")
     ax.set_ylabel("PnL cumulé")
     ax.legend()
