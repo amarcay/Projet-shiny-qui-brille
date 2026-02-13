@@ -1,129 +1,158 @@
-# Projet Shiny Qui Brille – Trading GBP/USD
+# Projet Shiny Qui Brille – Trading Algorithmique GBP/USD (M15)
 
-Ce projet est une application de Data Science complète pour le trading automatique sur la paire **GBP/USD** (données M15). Il intègre un pipeline de données, d'analyse exploratoire, de modélisation (ML & RL), et une interface utilisateur web (Flask + FastAPI).
+Ce projet est une solution complète de trading algorithmique "End-to-End" pour la paire **GBP/USD**. Il part des données brutes (M1), les transforme en indicateurs techniques sophistiqués, entraîne des modèles de Machine Learning (Supervisé et Renforcement), et expose la meilleure stratégie via une API et un Dashboard.
 
-## 📌 Contexte du Projet
+## 📌 Architecture du Pipeline
 
-Ce projet scolaire a pour but de mettre en œuvre une chaîne de traitement de données financières de bout en bout ("End-to-End"), de la collecte des données brutes jusqu'au déploiement d'un modèle via une API.
+Le projet est organisé en **11 Phases** séquentielles situées dans `src/app/`. Chaque script est autonome et produit des artefacts pour l'étape suivante.
 
-L'objectif principal est de maximiser le **Profit cumulé (PnL)** et le **Ratio de Sharpe** sur l'année 2024 (Test), en s'entraînant sur 2022 et en validant sur 2023.
-
----
-
-## 🏗 Architecture du Projet
-
-Le projet est structuré en plusieurs "Phases" séquentielles situées dans `src/app/` :
-
-1.  **Phases 1-3 (Data)** : Importation, Agrégation (M15) et Nettoyage des données.
-2.  **Phase 4 (EDA)** : Analyse exploratoire (Stationnarité, Volatilité, Autocorrélation).
-3.  **Phase 5 (Feature Engineering)** : Création d'indicateurs techniques (RSI, MACD, Bandes de Bollinger, etc.).
-4.  **Phase 6 (Baseline)** : Modèle naïf pour établir une performance de référence.
-5.  **Phase 7 (ML Supervisé)** : Entraînement de modèles classiques (Random Forest, Gradient Boosting).
-6.  **Phase 8 (RL)** : Entraînement d'un agent de Reinforcement Learning (DQN).
-7.  **Phase 9 (Évaluation)** : Comparaison finale des stratégies.
-8.  **Phase 10 (API)** : Exposition du meilleur modèle via FastAPI (`src/api/`).
-9.  **Phase 11 (Registry)** : Gestion des versions de modèles (`models/registry.json`).
-10. **Application Web** : Dashboard de suivi et de signaux (`src/app/app.py`).
+| Phase | Script | Description |
+| :--- | :--- | :--- |
+| **1** | `phase1_import_m1.py` | Importation des données brutes, fusion Date+Time, et vérification de la régularité (1 min). |
+| **2** | `phase2_aggregation_m15.py` | Agrégation des bougies M1 en **M15** (Open, High, Low, Close, Volume). |
+| **3** | `phase3_nettoyage_m15.py` | Nettoyage strict : suppression des bougies incomplètes (<15 min de data) et des aberrations de prix. |
+| **4** | `phase4_eda.py` | Analyse exploratoire : distribution des rendements, test de stationnarité (ADF), et autocorrélation. |
+| **5** | `phase5_feature_engineering.py` | Création de **20 features techniques** (voir ci-dessous) sans biais futur (look-ahead bias). |
+| **6** | `phase6_baseline.py` | Établissement de baselines : *Buy & Hold*, *Random*, et *Règles Fixes* (EMA+RSI+ADX). |
+| **7** | `phase7_ml.py` | Entraînement de modèles supervisés (Gradient Boosting, Random Forest) pour prédire la direction du prix. |
+| **8** | `phase8_rl.py` | Entraînement d'un agent **RL (Deep Q-Network)** maximisant le PnL sur plusieurs années. |
+| **9** | `phase9_evaluation.py` | Comparaison finale de toutes les stratégies (Baselines vs ML vs RL) sur le set de Test (2024). |
+| **10** | `src/api/` | API FastAPI exposant le meilleur modèle pour des prédictions en temps réel. |
+| **11** | `phase11_model_registry.py` | Versioning automatique (`models/registry.json`) et sélection du champion validé. |
 
 ---
 
-## 🧠 Choix du Modèle et Justification
+## 📊 Feature Engineering (Phase 5)
 
-Une partie centrale du projet a été la comparaison entre une approche **Supervisée (v1)** et une approche par **Renforcement (v2)**.
+Le modèle s'appuie sur une combinaison d'indicateurs de momentum, de volatilité et de tendance, calculés sur le passé uniquement :
 
-### Comparaison des Versions
-
-Les modèles sont stockés dans le `model registry` avec leurs performances respectives. Voici les résultats obtenus sur le set de Test (2024) :
-
-| Version | Modèle | Type | Profit | Sharpe | Max Drawdown |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **v1** | Gradient Boosting | Supervisé (Sklearn) | -1.62% | -24.07 | -1.62% |
-| **v2** | **DQN (Deep Q-Network)** | **Reinforcement Learning** | **-0.07%** | **-1.10** | **-0.09%** |
-
-*(Données issues de `models/version_comparison.csv`)*
-
-### Pourquoi avons-nous choisi le modèle v2 (RL) ?
-
-Bien que les deux modèles aient des difficultés à générer un profit net positif sur la période de test (marché difficile ou coûts de transaction impactants), le modèle **v2 (DQN)** est **nettement supérieur** au modèle v1 pour plusieurs raisons fondamentales :
-
-1.  **Objectif d'Optimisation (La justification clé)** :
-    *   **Le modèle v1 (Supervisé)** cherche à maximiser la *précision* (Accuracy) de la prédiction du mouvement futur (Hausse/Baisse). Or, avoir raison 55% du temps ne garantit pas d'être rentable si les gains sont faibles et les pertes importantes.
-    *   **Le modèle v2 (RL)** cherche directement à maximiser la **récompense (Reward)**, qui est ici définie comme le **PnL (Profit and Loss)**. L'agent apprend à ne trader que lorsque l'espérance de gain est supérieure aux coûts.
-
-2.  **Gestion des Coûts de Transaction** :
-    *   Le modèle RL intègre le coût de transaction (spread) dans son environnement d'entraînement. Il apprend naturellement à éviter le "sur-trading" (trop d'ordres qui grignotent le capital), ce qui explique son nombre de trades beaucoup plus faible et sélectif.
-    *   Le modèle Supervisé ne "voit" pas les coûts lors de son entraînement.
-
-3.  **Gestion du Risque (Drawdown)** :
-    *   Notre fonction de récompense RL inclut une pénalité pour le **Drawdown** (perte maximale consécutive). Cela force l'agent à être plus prudent pour préserver le capital.
-
-**Conclusion** : Nous avons retenu la version **v2** comme modèle de production car elle démontre une bien meilleure résilience et une "intelligence" de gestion du capital que l'approche supervisée classique ne peut pas capturer.
+*   **Momentum / Court Terme** : Retours (1, 4 périodes), RSI (14), EMA (20, 50), Différence EMA.
+*   **Volatilité** : Rolling Std (20, 100), ATR (14), Ratio de Volatilité, Range M15, Body, Wicks (mèches).
+*   **Tendance / Régime** : EMA (200), Distance à EMA 200, Slope EMA 50, ADX (14), MACD + Signal.
 
 ---
 
-## 🚀 Installation et Utilisation
+## 🧠 Stratégies et Modèles
 
-### 1. Pré-requis
+### 1. Baselines (Phase 6)
+*   **Buy & Hold** : Achat au début, vente à la fin (référence de marché).
+*   **Règles Fixes** : Stratégie classique "Trend Following" (Achat si EMA court > EMA long + RSI neutre + ADX fort).
 
-Le projet utilise `poetry` pour la gestion des dépendances, ou peut être installé via `pip`.
+### 2. Machine Learning Supervisé (Phase 7 - v1)
+*   **Modèle** : HistGradientBoostingClassifier.
+*   **Objectif** : Maximiser la précision (Accuracy) de la prédiction Up/Down.
+*   **Limitation** : Ne prend pas en compte les coûts de transaction ni l'ampleur des mouvements.
+
+### 3. Reinforcement Learning (Phase 8 - v2)
+*   **Modèle** : **DQN (Deep Q-Network)** via Stable-Baselines3.
+*   **Architecture** : Réseau de neurones (MlpPolicy) prenant l'état du marché et la position actuelle.
+*   **Objectif** : Maximiser directement le **Profit (PnL)** net de frais.
+*   **Environnement** : Simulation réaliste incluant spreads et pénalités de drawdown.
+
+---
+
+## 🏆 Résultats et Choix du Modèle
+
+Les modèles sont comparés sur l'année de **Test (2024)**, totalement inconnue lors de l'entraînement.
+
+| Version | Modèle | Approche | Profit | Sharpe | Max Drawdown | Verdict |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **v1** | Gradient Boosting | Supervisé | -1.62% | -24.07 | -1.62% | Trop agressif (Overtrading) |
+| **v2** | **DQN** | **RL** | **-0.07%** | **-1.10** | **-0.09%** | **Sélectionné** |
+
+### Pourquoi le RL (v2) est-il meilleur ?
+L'approche par renforcement a démontré une "intelligence" de gestion supérieure :
+1.  **Sélectivité** : Il trade beaucoup moins souvent que le supervisé, évitant d'être mangé par les spreads.
+2.  **Gestion du Risque** : Grâce à la pénalité de drawdown dans sa fonction de récompense, il coupe rapidement les pertes ou évite les entrées risquées, divisant le Max Drawdown par 18 par rapport au ML classique.
+
+---
+
+## 💶 Simulation Réaliste (10k€)
+
+Le script `src/app/simulation_10k.py` simule le comportement du modèle v2 sur un portefeuille de **10 000€** en 2024 avec :
+*   Levier 1:30 (typique retail).
+*   Taille de position : 1 mini-lot (10k unités).
+*   Spread : 1 pip (coût réaliste).
+
+Les résultats de cette simulation (courbe de capital, drawdown, stats mensuelles) sont générés dans `reports/simulation/`.
+
+---
+
+## 🚀 Guide d'Utilisation
+
+### 1. Installation
 
 ```bash
-# Via Poetry
+# Via Poetry (recommandé)
 poetry install
-
-# Ou via pip (si requirements.txt généré)
-pip install -r requirements.txt
 ```
 
-### 2. Lancer le Pipeline (Entraînement)
+### 2. Exécution du Pipeline (Entraînement complet)
 
-Pour régénérer les modèles et mettre à jour le registre :
+Pour ré-entraîner les modèles depuis zéro :
 
 ```bash
-# Lance le feature engineering, puis les entraînements ML et RL, et met à jour le registry
+# Génération des features
 python src/app/phase5_feature_engineering.py
+
+# Entraînement ML (Supervisé)
 python src/app/phase7_ml.py
+
+# Entraînement RL (DQN) - Peut prendre du temps (~10-15 min)
 python src/app/phase8_rl.py
+
+# Enregistrement et sélection du champion
 python src/app/phase11_model_registry.py
 ```
 
-### 3. Lancer l'Application (Production)
+### 3. Lancer la Plateforme (Production)
 
-L'architecture repose sur deux services qui doivent tourner en parallèle :
+L'architecture sépare le moteur de décision (API) de l'interface utilisateur (Dashboard). Lancez les deux commandes dans deux terminaux séparés :
 
-**A. L'API (Backend FastAPI)**
-Sert les prédictions du meilleur modèle chargé depuis le registry.
+**Terminal 1 : API FastAPI (Backend)**
 ```bash
-# Depuis la racine du projet
 uvicorn src.api.api:app --reload --port 8000
 ```
-*L'API sera accessible sur `http://localhost:8000` (Doc interactive sur `/docs`).*
+*Documentation API : http://localhost:8000/docs*
 
-**B. Le Dashboard (Frontend Flask)**
-Interface utilisateur pour visualiser les performances et les signaux.
+**Terminal 2 : Dashboard Flask (Frontend)**
 ```bash
 python src/app/app.py
 ```
-*L'application sera accessible sur `http://localhost:5000`.*
+*Interface Web : http://localhost:5000*
+
+### 🐳 Docker
+
+Le projet est conteneurisé pour faciliter le déploiement. L'image Docker contient tout l'environnement et lance automatiquement l'API et le Dashboard.
+
+**1. Construire l'image**
+```bash
+docker build -t gbpusd-trading .
+```
+
+**2. Lancer le conteneur**
+```bash
+docker run -p 5000:5000 -p 8000:8000 gbpusd-trading
+```
+*L'application sera accessible sur `http://localhost:5000` et l'API sur `http://localhost:8000`.*
 
 ---
 
-## 📂 Structure des Dossiers
+## 📂 Structure du Projet
 
 ```text
 .
-├── data/               # Données brutes et processées
-├── models/             # Registry et binaires des modèles (v1, v2...)
-│   ├── registry.json   # Fichier central de versioning
-│   └── version_comparison.csv
-├── reports/            # Graphiques et métriques générés
+├── CLAUDE.md           # Guide de développement et conventions
+├── Dockerfile          # Configuration Docker image
+├── docker-entrypoint.sh # Script de démarrage Docker
+├── data/               # Stockage des données (raw, processed, features)
+├── models/             # Artefacts des modèles (joblib, zip) et Registry
+├── reports/            # Rapports d'évaluation (PNG, CSV)
 ├── src/
-│   ├── api/            # Code de l'API FastAPI (backend)
-│   └── app/            # Code du Pipeline et du Dashboard Flask (frontend)
-│       ├── phase*.py   # Scripts des différentes étapes du projet
-│       └── templates/  # Templates HTML pour le dashboard
-└── pyproject.toml      # Dépendances du projet
+│   ├── api/            # Backend FastAPI (routers, services, schemas)
+│   └── app/            # Pipelines de données, Scripts ML/RL, Dashboard
+└── pyproject.toml      # Gestion des dépendances
 ```
 
 ---
-*Projet réalisé par Alphonse Marcay et Thomas Bourvon.*
+*Projet scolaire réalisé par Alphonse Marcay et Thomas Bourvon.*
