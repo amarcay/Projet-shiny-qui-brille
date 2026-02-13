@@ -1,158 +1,228 @@
-# Projet Shiny Qui Brille – Trading Algorithmique GBP/USD (M15)
+# Systeme de decision algorithmique GBP/USD
 
-Ce projet est une solution complète de trading algorithmique "End-to-End" pour la paire **GBP/USD**. Il part des données brutes (M1), les transforme en indicateurs techniques sophistiqués, entraîne des modèles de Machine Learning (Supervisé et Renforcement), et expose la meilleure stratégie via une API et un Dashboard.
+Projet de Master 2 Data Science -- pipeline complet de trading algorithmique sur la paire GBP/USD en resolution M15 (15 minutes), de l'importation des donnees brutes jusqu'au deploiement d'une API de prediction.
 
-## 📌 Architecture du Pipeline
-
-Le projet est organisé en **11 Phases** séquentielles situées dans `src/app/`. Chaque script est autonome et produit des artefacts pour l'étape suivante.
-
-| Phase | Script | Description |
-| :--- | :--- | :--- |
-| **1** | `phase1_import_m1.py` | Importation des données brutes, fusion Date+Time, et vérification de la régularité (1 min). |
-| **2** | `phase2_aggregation_m15.py` | Agrégation des bougies M1 en **M15** (Open, High, Low, Close, Volume). |
-| **3** | `phase3_nettoyage_m15.py` | Nettoyage strict : suppression des bougies incomplètes (<15 min de data) et des aberrations de prix. |
-| **4** | `phase4_eda.py` | Analyse exploratoire : distribution des rendements, test de stationnarité (ADF), et autocorrélation. |
-| **5** | `phase5_feature_engineering.py` | Création de **20 features techniques** (voir ci-dessous) sans biais futur (look-ahead bias). |
-| **6** | `phase6_baseline.py` | Établissement de baselines : *Buy & Hold*, *Random*, et *Règles Fixes* (EMA+RSI+ADX). |
-| **7** | `phase7_ml.py` | Entraînement de modèles supervisés (Gradient Boosting, Random Forest) pour prédire la direction du prix. |
-| **8** | `phase8_rl.py` | Entraînement d'un agent **RL (Deep Q-Network)** maximisant le PnL sur plusieurs années. |
-| **9** | `phase9_evaluation.py` | Comparaison finale de toutes les stratégies (Baselines vs ML vs RL) sur le set de Test (2024). |
-| **10** | `src/api/` | API FastAPI exposant le meilleur modèle pour des prédictions en temps réel. |
-| **11** | `phase11_model_registry.py` | Versioning automatique (`models/registry.json`) et sélection du champion validé. |
+**Auteurs** : Alphonse Marcay, Thomas Bourvon
 
 ---
 
-## 📊 Feature Engineering (Phase 5)
+## Objectif
 
-Le modèle s'appuie sur une combinaison d'indicateurs de momentum, de volatilité et de tendance, calculés sur le passé uniquement :
-
-*   **Momentum / Court Terme** : Retours (1, 4 périodes), RSI (14), EMA (20, 50), Différence EMA.
-*   **Volatilité** : Rolling Std (20, 100), ATR (14), Ratio de Volatilité, Range M15, Body, Wicks (mèches).
-*   **Tendance / Régime** : EMA (200), Distance à EMA 200, Slope EMA 50, ADX (14), MACD + Signal.
+Construire et evaluer un systeme de decision de trading (achat / vente / attente) sur GBP/USD, en comparant des approches classiques (regles techniques), du machine learning supervise et du reinforcement learning. Le projet couvre l'ensemble du cycle : collecte, nettoyage, feature engineering, modelisation, evaluation et mise en production via API.
 
 ---
 
-## 🧠 Stratégies et Modèles
+## Donnees
+
+- **Source** : HistData.com (bougies M1, format MetaTrader)
+- **Paire** : GBP/USD
+- **Periode** : janvier 2022 -- janvier 2026
+- **Volume brut** : ~1.47 million de bougies M1
+- **Apres agregation M15 et nettoyage** : 94 876 bougies M15 propres
+
+### Split temporel (strict, jamais aleatoire)
+
+| Ensemble       | Periode     | Bougies |
+|----------------|-------------|---------|
+| Entrainement   | 2022--2023  | 45 195  |
+| Validation     | 2024        | 23 825  |
+| Test           | 2025--2026  | 25 756  |
+
+---
+
+## Architecture du pipeline
+
+```
+src/app/
+  phase1_import_m1.py          Importation et fusion des CSV bruts M1
+  phase2_aggregation_m15.py    Agregation M1 -> M15 (OHLCV + compteur qualite)
+  phase3_nettoyage_m15.py      Suppression bougies incompletes, controles OHLC
+  phase4_eda.py                Analyse exploratoire
+  phase5_feature_engineering.py Construction de 20 features techniques
+  phase6_baseline.py           Strategies de reference (Buy&Hold, Random, Regles)
+  phase7_ml.py                 Machine Learning supervise (4 modeles)
+  phase8_rl.py                 Reinforcement Learning -- DQN (Stable-Baselines3)
+  phase8_ql.py                 Reinforcement Learning -- Q-Learning tabulaire
+  phase9_evaluation.py         Comparaison finale de toutes les strategies
+
+src/api/                       API FastAPI (core/routers/schemas/services)
+```
+
+### Features techniques (20)
+
+| Categorie   | Features |
+|-------------|----------|
+| Rendements  | return_1, return_4 |
+| Tendance    | ema_20, ema_50, ema_200, ema_diff, distance_to_ema200, slope_ema50 |
+| Momentum    | rsi_14, macd, macd_signal, adx_14 |
+| Volatilite  | rolling_std_20, rolling_std_100, atr_14, volatility_ratio |
+| Price action| range_15m, body, upper_wick, lower_wick |
+
+---
+
+## Strategies evaluees
 
 ### 1. Baselines (Phase 6)
-*   **Buy & Hold** : Achat au début, vente à la fin (référence de marché).
-*   **Règles Fixes** : Stratégie classique "Trend Following" (Achat si EMA court > EMA long + RSI neutre + ADX fort).
 
-### 2. Machine Learning Supervisé (Phase 7 - v1)
-*   **Modèle** : HistGradientBoostingClassifier.
-*   **Objectif** : Maximiser la précision (Accuracy) de la prédiction Up/Down.
-*   **Limitation** : Ne prend pas en compte les coûts de transaction ni l'ampleur des mouvements.
+- **Buy & Hold** : position longue permanente
+- **Random** : signaux aleatoires uniformes (BUY/SELL/HOLD)
+- **Regles (EMA + RSI + ADX)** : achat si EMA_diff > 0, RSI < 70, ADX > 20 ; vente inverse
 
-### 3. Reinforcement Learning (Phase 8 - v2)
-*   **Modèle** : **DQN (Deep Q-Network)** via Stable-Baselines3.
-*   **Architecture** : Réseau de neurones (MlpPolicy) prenant l'état du marché et la position actuelle.
-*   **Objectif** : Maximiser directement le **Profit (PnL)** net de frais.
-*   **Environnement** : Simulation réaliste incluant spreads et pénalités de drawdown.
+### 2. Machine Learning supervise (Phase 7)
 
----
+- **DummyClassifier** (most_frequent) : reference statistique
+- **Logistic Regression** (avec StandardScaler)
+- **Random Forest** (200 arbres, max_depth=10)
+- **HistGradientBoosting** (300 iterations, lr=0.05)
 
-## 🏆 Résultats et Choix du Modèle
+Target : y = 1 si close_{t+1} > close_t, 0 sinon.
 
-Les modèles sont comparés sur la période de **Test (2025 & 2026)**, totalement inconnue lors de l'entraînement.
+### 3. Reinforcement Learning (Phase 8)
 
-| Version | Modèle | Approche | Profit | Sharpe | Max Drawdown | Verdict |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **v1** | Gradient Boosting | Supervisé | -1.62% | -24.07 | -1.62% | Trop agressif (Overtrading) |
-| **v2** | **DQN** | **RL** | **-0.07%** | **-1.10** | **-0.09%** | **Sélectionné** |
-
-### Pourquoi le RL (v2) est-il meilleur ?
-L'approche par renforcement a démontré une "intelligence" de gestion supérieure :
-1.  **Sélectivité** : Il trade beaucoup moins souvent que le supervisé, évitant d'être mangé par les spreads.
-2.  **Gestion du Risque** : Grâce à la pénalité de drawdown dans sa fonction de récompense, il coupe rapidement les pertes ou évite les entrées risquées, divisant le Max Drawdown par 18 par rapport au ML classique.
+- **DQN** (Deep Q-Network) : reseau 128-128, 19 features normalisees + position, 3 actions discretes. 5 episodes sur le train set (~225k timesteps).
+- **Q-Learning tabulaire** : 5 features discretisees en 5 bins (9 375 etats possibles), Q-table classique, 15 episodes.
 
 ---
 
-## 💶 Simulation Réaliste (10k€)
+## Resultats sur le test 2025--2026
 
-Le script `src/app/simulation_10k.py` simule le comportement du modèle v2 sur un portefeuille de **10 000€** en **2025 & 2026** avec :
-*   Levier 1:30 (typique retail).
-*   Taille de position : 1 mini-lot (10k unités).
-*   Spread : 1 pip (coût réaliste).
+| Strategie              | Profit cumule | Sharpe | Max drawdown | Profit factor | Trades |
+|------------------------|---------------|--------|--------------|---------------|--------|
+| Buy & Hold             | +0.0928       | +1.14  | -0.057       | 1.022         | 1      |
+| Regles (EMA+RSI+ADX)   | +0.0785       | +0.97  | -0.069       | 1.019         | 324    |
+| RL (DQN)               | -0.5158       | -6.29  | -0.549       | 0.888         | 2 868  |
+| RL (Q-Learning)         | -1.3430       | -17.33 | -1.355       | 0.716         | 6 701  |
+| ML (Gradient Boosting)  | -1.4425       | -17.48 | -1.449       | 0.721         | 7 110  |
+| Random                 | -1.8030       | -21.84 | -1.807       | 0.664         | 8 610  |
 
-Les résultats de cette simulation (courbe de capital, drawdown, stats mensuelles) sont générés dans `reports/simulation/`.
+Seuls Buy & Hold et Regles (EMA+RSI+ADX) sont valides sur le test (Sharpe > 0, profit > 0).
 
 ---
 
-## 🚀 Guide d'Utilisation
+## Analyse critique
 
-### 1. Installation
+### Ce qui fonctionne
 
-```bash
-# Via uv (recommandé)
-uv sync
+- Le pipeline de donnees est robuste : 99.6% de regularite M1, nettoyage systematique, pas de look-ahead dans les features.
+- Le split temporel strict garantit l'absence de fuite d'information.
+- Les baselines simples (Buy & Hold, regles techniques) captent la tendance haussiere du GBP/USD en 2025.
+
+### Ce qui ne fonctionne pas
+
+- **Le ML supervise ne bat pas le hasard** : accuracy ~51%, Sharpe tres negatif. La target binaire (hausse/baisse de la prochaine bougie M15) est essentiellement du bruit. Le marche forex M15 est proche de l'efficience sur ce type de prediction directionnelle a court terme. Le cout de transaction (1 pip) penalise lourdement les modeles qui tradent frequemment (7 000+ trades).
+
+- **Le DQN converge vers un biais long** : 89% du temps en position longue. Il a appris que rester long est moins mauvais que trader activement, mais ne generalise pas -- il subit le drawdown quand la tendance s'inverse. Le reward shaping (penalite drawdown) n'est pas suffisant pour apprendre une politique non-triviale.
+
+- **Le Q-Learning tabulaire est structurellement limite** : discretiser 5 features en 5 bins perd enormement d'information. Avec ~5 500 etats visites sur 9 375 possibles, la Q-table est sous-exploree. L'agent trade presque aleatoirement (50/50 long/short), generant des couts de transaction massifs.
+
+### Limites fondamentales
+
+1. **Resolution M15 et forex** : le marche des changes est l'un des plus efficients au monde. Predire la direction de la prochaine bougie M15 avec des indicateurs techniques publics releve du bruit. Les signaux exploitables existent sur des horizons plus longs ou avec des donnees alternatives (flux d'ordres, sentiment, macro).
+
+2. **Couts de transaction** : avec un spread de 1 pip (~0.01%), tout modele qui trade frequemment doit etre significativement meilleur que le hasard pour etre rentable. Un taux de precision de 51% est insuffisant.
+
+3. **Stationnarite** : les regimes de marche changent. Un modele entraine sur 2022-2023 (forte volatilite post-COVID, hausse des taux) ne generalise pas necessairement a 2025 (contexte macro different). Le walk-forward ou le re-entrainement periodique serait plus adapte.
+
+4. **Reward RL** : le PnL brut est un signal tres sparse et bruise pour l'apprentissage. Des approches avec reward shaping plus elabore (Sharpe incrementiel, risk-adjusted returns) ou des methodes de meta-apprentissage pourraient ameliorer la convergence.
+
+### Pistes d'amelioration
+
+- Walk-forward validation (re-entrainement glissant tous les N mois)
+- Features alternatives : sentiment, donnees macro, order flow
+- Horizon de prediction plus long (H1, H4, Daily)
+- Filtrage des periodes de faible volatilite (ADX < 20 = ne pas trader)
+- Methodes d'ensemble ou stacking
+- RL avec PPO ou SAC (plus stables que DQN pour les environnements financiers)
+
+---
+
+## API de prediction
+
+API REST (FastAPI) exposant le modele Gradient Boosting pour des predictions en temps reel.
+
+```
+GET  /health              Statut du service
+GET  /model/info          Version et metadata du modele charge
+POST /model/load          Charger une version specifique (v1, v2)
+POST /predict             Prediction sur une bougie (17 features)
+POST /predict/batch       Prediction sur un lot de bougies
 ```
 
-### 2. Exécution du Pipeline (Entraînement complet)
-
-Pour ré-entraîner les modèles depuis zéro :
+### Lancer l'API
 
 ```bash
-# Génération des features
-python src/app/phase5_feature_engineering.py
-
-# Entraînement ML (Supervisé)
-python src/app/phase7_ml.py
-
-# Entraînement RL (DQN) - Peut prendre du temps (~10-15 min)
-python src/app/phase8_rl.py
-
-# Enregistrement et sélection du champion
-python src/app/phase11_model_registry.py
+uvicorn src.api.api:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Lancer la Plateforme (Production)
+### Docker
 
-L'architecture sépare le moteur de décision (API) de l'interface utilisateur (Dashboard). Lancez les deux commandes dans deux terminaux séparés :
-
-**Terminal 1 : API FastAPI (Backend)**
-```bash
-uvicorn src.api.api:app --reload --port 8000
-```
-*Documentation API : http://localhost:8000/docs*
-
-**Terminal 2 : Dashboard Flask (Frontend)**
-```bash
-python src/app/app.py
-```
-*Interface Web : http://localhost:5000*
-
-### 🐳 Docker
-
-Le projet est conteneurisé pour faciliter le déploiement. L'image Docker contient tout l'environnement et lance automatiquement l'API et le Dashboard.
-
-**1. Construire l'image**
 ```bash
 docker build -t gbpusd-trading .
-```
-
-**2. Lancer le conteneur**
-```bash
 docker run -p 5000:5000 -p 8000:8000 gbpusd-trading
 ```
-*L'application sera accessible sur `http://localhost:5000` et l'API sur `http://localhost:8000`.*
 
 ---
 
-## 📂 Structure du Projet
+## Execution du pipeline
 
-```text
-.
-├── CLAUDE.md           # Guide de développement et conventions
-├── Dockerfile          # Configuration Docker image
-├── docker-entrypoint.sh # Script de démarrage Docker
-├── data/               # Stockage des données (raw, processed, features)
-├── models/             # Artefacts des modèles (joblib, zip) et Registry
-├── reports/            # Rapports d'évaluation (PNG, CSV)
-├── src/
-│   ├── api/            # Backend FastAPI (routers, services, schemas)
-│   └── app/            # Pipelines de données, Scripts ML/RL, Dashboard
-└── pyproject.toml      # Gestion des dépendances
+```bash
+# 1. Importation M1
+python src/app/phase1_import_m1.py
+
+# 2. Agregation M15
+python src/app/phase2_aggregation_m15.py
+
+# 3. Nettoyage
+python src/app/phase3_nettoyage_m15.py
+
+# 4. Feature engineering
+python src/app/phase5_feature_engineering.py
+
+# 5. Baselines
+python src/app/phase6_baseline.py
+
+# 6. Machine Learning
+python src/app/phase7_ml.py
+
+# 7. Reinforcement Learning
+python src/app/phase8_rl.py     # DQN
+python src/app/phase8_ql.py     # Q-Learning tabulaire
+
+# 8. Evaluation finale
+python src/app/phase9_evaluation.py
 ```
 
 ---
-*Projet scolaire réalisé par Alphonse Marcay et Thomas Bourvon.*
+
+## Dependances
+
+Python >= 3.10. Principales librairies :
+
+- pandas, numpy, scikit-learn
+- stable-baselines3, gymnasium
+- matplotlib, seaborn, plotly
+- FastAPI, uvicorn, pydantic
+
+Installation : `pip install -e .` ou `uv pip install -e .`
+
+---
+
+## Structure des fichiers
+
+```
+Projet-shiny-qui-brille/
+  src/
+    app/                    Scripts du pipeline (phases 1-9)
+    api/                    API FastAPI
+      core/                 Configuration, registry des modeles
+      routers/              Endpoints (health, model, predict)
+      schemas/              Schemas Pydantic (candle, responses)
+      services/             Logique metier (prediction)
+  models/
+    v1/                     Gradient Boosting + scaler + DQN
+    v2/                     Q-Learning (Q-table + discretizer)
+  data/                     Donnees brutes et traitees (gitignore)
+  reports/                  Graphiques et metriques (gitignore)
+  Dockerfile
+  pyproject.toml
+```
